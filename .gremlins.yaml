@@ -1,0 +1,8 @@
+unleash:
+  tags: integration
+  threshold:
+    efficacy: 70
+    mutant-coverage: 70
+  exclude-files:
+    - "^cmd/"
+    - "constants(_test)?\\.go$"

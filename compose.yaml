@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_DB: demo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?export POSTGRES_PASSWORD before starting}
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host", "127.0.0.1", "--username", "demo", "--dbname", "demo"]
+      interval: 2s
+      retries: 30
+
+  migrate:
+    build: .
+    entrypoint: ["/usr/local/bin/migrate"]
+    environment:
+      DATABASE_URL: postgres://demo:${POSTGRES_PASSWORD}@postgres:5432/demo?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://demo:${POSTGRES_PASSWORD}@postgres:5432/demo?sslmode=disable
+      API_TOKEN: ${API_TOKEN:?export API_TOKEN before starting}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

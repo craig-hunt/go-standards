@@ -1,0 +1,67 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    name: format · vet · lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Format check
+        run: make format-check
+      - name: Vet
+        run: make vet
+      - name: Lint
+        run: make lint
+
+  tests:
+    name: unit and integration tests
+    runs-on: ubuntu-latest
+    needs: static-analysis
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Unit tests
+        run: make test
+      # The script starts a throwaway Postgres container, runs the suite
+      # against it, and removes it, exactly as it does on a developer machine.
+      - name: Integration tests
+        run: make integration
+
+  mutation:
+    name: mutation gate (70%)
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Mutation testing
+        run: make mutation
+
+  advisories:
+    name: vulnerabilities · secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Known vulnerabilities
+        run: make vulncheck
+      - name: Committed secrets
+        run: make secrets
