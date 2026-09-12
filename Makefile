@@ -13,7 +13,7 @@ GOLANGCI_LINT := $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lin
 GREMLINS := $(GO) run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION)
 GOVULNCHECK := $(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 GITLEAKS := $(GO) run github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
-WITH_TEST_POSTGRES := ./scripts/with-test-postgres.sh
+WITH_TEST_POSTGRES := bash ./scripts/with-test-postgres.sh
 
 .PHONY: verify format-check vet lint test integration mutation vulncheck secrets
 
