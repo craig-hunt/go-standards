@@ -1,0 +1,60 @@
+version: "2"
+
+run:
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - forbidigo
+    - goconst
+    - gosec
+    - mnd
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+    - usestdlibvars
+  settings:
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    mnd:
+      checks:
+        - argument
+        - assign
+        - case
+        - condition
+        - operation
+        - return
+      ignored-numbers:
+        - "0"
+        - "1"
+    forbidigo:
+      forbid:
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: write through log/slog so every line stays structured
+        - pattern: ^print(ln)?$
+          msg: write through log/slog so every line stays structured
+        - pattern: ^log\.
+          msg: use log/slog instead of the unstructured log package
+
+  exclusions:
+    rules:
+      # A constants file is where named values and seed data belong, so the
+      # magic number check has nothing to flag there.
+      - path: (^|/)constants(_test)?\.go$
+        linters:
+          - mnd
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/craig-hunt/go-standards
