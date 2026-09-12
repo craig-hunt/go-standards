@@ -17,6 +17,7 @@ const (
 )
 
 const (
+	objectStart      = '{'
 	msgWriteFailed   = "response write failed"
 	msgRequestFailed = "request failed"
 	wrapFormat       = "%w: %w"

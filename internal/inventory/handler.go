@@ -23,7 +23,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	query, err := ParseQuery(r.URL.Query())
 	if err != nil {
-		httpjson.WriteError(w, h.logger, http.StatusBadRequest, CodeInvalidQuery, err.Error())
+		httpjson.WriteError(w, r, h.logger, http.StatusBadRequest, CodeInvalidQuery, err.Error())
 		return
 	}
 	items, err := h.store.Items(r.Context())
@@ -31,5 +31,5 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteInternal(w, r, h.logger, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusOK, Apply(items, query))
+	httpjson.Write(w, r, h.logger, http.StatusOK, Apply(items, query))
 }

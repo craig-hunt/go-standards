@@ -27,9 +27,13 @@ func marshal(t *testing.T, value any) []byte {
 	return body
 }
 
+func newRequest(body []byte) *http.Request {
+	ctx := requestid.With(context.Background(), sampleRequestID)
+	return httptest.NewRequestWithContext(ctx, methodPost, targetPath, bytes.NewReader(body))
+}
+
 func decodeRequest(body []byte) (sample, error) {
-	request := httptest.NewRequestWithContext(context.Background(), methodPost, targetPath, bytes.NewReader(body))
-	return Decode[sample](httptest.NewRecorder(), request)
+	return Decode[sample](httptest.NewRecorder(), newRequest(body))
 }
 
 func readError(t *testing.T, recorder *httptest.ResponseRecorder) ErrorBody {
@@ -39,11 +43,15 @@ func readError(t *testing.T, recorder *httptest.ResponseRecorder) ErrorBody {
 	return body
 }
 
+func joined(parts ...string) []byte {
+	return []byte(strings.Join(parts, ""))
+}
+
 func TestWriteSendsStatusContentTypeAndBody(t *testing.T) {
 	logger, _ := logcapture.New()
 	recorder := httptest.NewRecorder()
 
-	Write(recorder, logger, http.StatusCreated, sample{Name: sampleName})
+	Write(recorder, newRequest(nil), logger, http.StatusCreated, sample{Name: sampleName})
 
 	expect.Equal(t, recorder.Code, http.StatusCreated)
 	expect.Equal(t, recorder.Header().Get(HeaderContentType), ContentTypeJSON)
@@ -52,20 +60,21 @@ func TestWriteSendsStatusContentTypeAndBody(t *testing.T) {
 	expect.Equal(t, body, sample{Name: sampleName})
 }
 
-func TestWriteLogsWhenTheBodyCannotEncode(t *testing.T) {
+func TestWriteLogsAnEncodingFailureWithTheRequestID(t *testing.T) {
 	logger, capture := logcapture.New()
 
-	Write(httptest.NewRecorder(), logger, http.StatusOK, map[string]any{unencodableValue: make(chan int)})
+	Write(httptest.NewRecorder(), newRequest(nil), logger, http.StatusOK, map[string]any{unencodableValue: make(chan int)})
 
 	record := capture.Find(t, msgWriteFailed)
 	expect.Equal(t, record[slog.LevelKey], any(slog.LevelWarn.String()))
+	expect.Equal(t, record[requestid.LogKey], any(sampleRequestID))
 }
 
 func TestWriteErrorSendsCodeAndMessage(t *testing.T) {
 	logger, _ := logcapture.New()
 	recorder := httptest.NewRecorder()
 
-	WriteError(recorder, logger, http.StatusBadRequest, CodeInvalidBody, MsgInvalidBody)
+	WriteError(recorder, newRequest(nil), logger, http.StatusBadRequest, CodeInvalidBody, MsgInvalidBody)
 
 	expect.Equal(t, recorder.Code, http.StatusBadRequest)
 	expect.Equal(t, readError(t, recorder), ErrorBody{Code: CodeInvalidBody, Message: MsgInvalidBody})
@@ -75,7 +84,7 @@ func TestWriteInvalidBodySendsBadRequestWithTheSharedMessage(t *testing.T) {
 	logger, _ := logcapture.New()
 	recorder := httptest.NewRecorder()
 
-	WriteInvalidBody(recorder, logger)
+	WriteInvalidBody(recorder, newRequest(nil), logger)
 
 	expect.Equal(t, recorder.Code, http.StatusBadRequest)
 	expect.Equal(t, readError(t, recorder), ErrorBody{Code: CodeInvalidBody, Message: MsgInvalidBody})
@@ -86,7 +95,7 @@ func TestWriteFieldErrorsSendsUnprocessableEntityWithEachField(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	fields := map[string]string{fieldKey: fieldMessage}
 
-	WriteFieldErrors(recorder, logger, fields)
+	WriteFieldErrors(recorder, newRequest(nil), logger, fields)
 
 	expect.Equal(t, recorder.Code, http.StatusUnprocessableEntity)
 	expect.Equal(t, readError(t, recorder), ErrorBody{Code: CodeValidation, Message: MsgValidation, Fields: fields})
@@ -95,10 +104,8 @@ func TestWriteFieldErrorsSendsUnprocessableEntityWithEachField(t *testing.T) {
 func TestWriteInternalHidesTheCauseAndLogsItWithTheRequestID(t *testing.T) {
 	logger, capture := logcapture.New()
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequestWithContext(context.Background(), methodPost, targetPath, nil)
-	request = request.WithContext(requestid.With(request.Context(), sampleRequestID))
 
-	WriteInternal(recorder, request, logger, errors.New(causeMessage))
+	WriteInternal(recorder, newRequest(nil), logger, errors.New(causeMessage))
 
 	expect.Equal(t, recorder.Code, http.StatusInternalServerError)
 	expect.Equal(t, readError(t, recorder), ErrorBody{Code: CodeInternal, Message: MsgInternal})
@@ -115,16 +122,28 @@ func TestDecodeReadsOneObjectWithKnownFields(t *testing.T) {
 	expect.Equal(t, value, sample{Name: sampleName})
 }
 
-func TestDecodeRejectsMalformedBodies(t *testing.T) {
-	single := marshal(t, sample{Name: sampleName})
+func TestDecodeAcceptsWhitespaceAfterTheObject(t *testing.T) {
+	value, err := decodeRequest(joined(string(marshal(t, sample{Name: sampleName})), trailingWhitespace))
+
+	expect.NoError(t, err)
+	expect.Equal(t, value, sample{Name: sampleName})
+}
+
+func TestDecodeRejectsAnythingButOneObjectWithKnownFields(t *testing.T) {
+	single := string(marshal(t, sample{Name: sampleName}))
 	cases := []struct {
 		name string
 		body []byte
 	}{
 		{name: "unknown field", body: marshal(t, map[string]string{unknownField: sampleName})},
-		{name: "second object after the first", body: append(append([]byte{}, single...), single...)},
+		{name: "second object after the first", body: joined(single, single)},
+		{name: "trailing text after the object", body: joined(single, trailingGarbage)},
 		{name: "body over the size limit", body: marshal(t, sample{Name: strings.Repeat(fillerCharacter, MaxBodyBytes)})},
 		{name: "empty body", body: nil},
+		{name: "null", body: []byte(nullBody)},
+		{name: "array", body: []byte(arrayBody)},
+		{name: "string", body: []byte(stringBody)},
+		{name: "number", body: []byte(numberBody)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

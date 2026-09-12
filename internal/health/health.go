@@ -20,17 +20,17 @@ type Report struct {
 }
 
 func Register(mux *http.ServeMux, pinger Pinger, logger *slog.Logger) {
-	mux.HandleFunc(RouteLive, func(w http.ResponseWriter, _ *http.Request) {
-		httpjson.Write(w, logger, http.StatusOK, Report{Status: StatusOK})
+	mux.HandleFunc(RouteLive, func(w http.ResponseWriter, r *http.Request) {
+		httpjson.Write(w, r, logger, http.StatusOK, Report{Status: StatusOK})
 	})
 	mux.HandleFunc(RouteReady, func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), ReadyTimeout)
 		defer cancel()
 		if err := pinger.Ping(ctx); err != nil {
 			logger.LogAttrs(ctx, slog.LevelWarn, MsgNotReady, slog.Any(httpjson.LogKeyError, err))
-			httpjson.Write(w, logger, http.StatusServiceUnavailable, Report{Status: StatusUnavailable})
+			httpjson.Write(w, r, logger, http.StatusServiceUnavailable, Report{Status: StatusUnavailable})
 			return
 		}
-		httpjson.Write(w, logger, http.StatusOK, Report{Status: StatusOK})
+		httpjson.Write(w, r, logger, http.StatusOK, Report{Status: StatusOK})
 	})
 }

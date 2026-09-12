@@ -42,7 +42,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	filter, err := ParseFilter(r.URL.Query().Get(QueryFilter))
 	if err != nil {
-		httpjson.WriteError(w, h.logger, http.StatusBadRequest, CodeInvalidFilter, MsgInvalidFilter)
+		httpjson.WriteError(w, r, h.logger, http.StatusBadRequest, CodeInvalidFilter, MsgInvalidFilter)
 		return
 	}
 	all, err := h.store.List(r.Context())
@@ -50,18 +50,18 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteInternal(w, r, h.logger, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusOK, Summarize(all, filter))
+	httpjson.Write(w, r, h.logger, http.StatusOK, Summarize(all, filter))
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	body, err := httpjson.Decode[createRequest](w, r)
 	if err != nil {
-		httpjson.WriteInvalidBody(w, h.logger)
+		httpjson.WriteInvalidBody(w, r, h.logger)
 		return
 	}
 	title, err := NewTitle(body.Title)
 	if err != nil {
-		httpjson.WriteFieldErrors(w, h.logger, map[string]string{FieldTitle: titleProblem(err)})
+		httpjson.WriteFieldErrors(w, r, h.logger, map[string]string{FieldTitle: titleProblem(err)})
 		return
 	}
 	created, err := h.store.Create(r.Context(), title)
@@ -69,7 +69,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteInternal(w, r, h.logger, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusCreated, created)
+	httpjson.Write(w, r, h.logger, http.StatusCreated, created)
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -79,11 +79,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := httpjson.Decode[updateRequest](w, r)
 	if err != nil {
-		httpjson.WriteInvalidBody(w, h.logger)
+		httpjson.WriteInvalidBody(w, r, h.logger)
 		return
 	}
 	if body.Completed == nil {
-		httpjson.WriteFieldErrors(w, h.logger, map[string]string{FieldCompleted: MsgCompletedRequired})
+		httpjson.WriteFieldErrors(w, r, h.logger, map[string]string{FieldCompleted: MsgCompletedRequired})
 		return
 	}
 	updated, err := h.store.SetCompleted(r.Context(), id, *body.Completed)
@@ -91,7 +91,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.writeStoreError(w, r, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusOK, updated)
+	httpjson.Write(w, r, h.logger, http.StatusOK, updated)
 }
 
 func (h *Handler) remove(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +112,7 @@ func (h *Handler) clearCompleted(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteInternal(w, r, h.logger, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusOK, ClearResult{Removed: removed})
+	httpjson.Write(w, r, h.logger, http.StatusOK, ClearResult{Removed: removed})
 }
 
 // titleProblem turns a validation error into the sentence a form shows. Go
@@ -127,7 +127,7 @@ func titleProblem(err error) string {
 func (h *Handler) pathID(w http.ResponseWriter, r *http.Request) (ID, bool) {
 	id, err := ParseID(r.PathValue(PathParamID))
 	if err != nil {
-		httpjson.WriteError(w, h.logger, http.StatusBadRequest, CodeInvalidID, MsgInvalidID)
+		httpjson.WriteError(w, r, h.logger, http.StatusBadRequest, CodeInvalidID, MsgInvalidID)
 		return 0, false
 	}
 	return id, true
@@ -135,7 +135,7 @@ func (h *Handler) pathID(w http.ResponseWriter, r *http.Request) (ID, bool) {
 
 func (h *Handler) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, ErrNotFound) {
-		httpjson.WriteError(w, h.logger, http.StatusNotFound, CodeNotFound, MsgNotFound)
+		httpjson.WriteError(w, r, h.logger, http.StatusNotFound, CodeNotFound, MsgNotFound)
 		return
 	}
 	httpjson.WriteInternal(w, r, h.logger, err)

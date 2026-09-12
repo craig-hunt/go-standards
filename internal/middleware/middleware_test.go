@@ -125,6 +125,46 @@ func TestLoggingReportsOKWhenTheHandlerNeverSetsAStatus(t *testing.T) {
 	expect.Equal(t, capture.Find(t, MsgRequestHandled)[LogKeyStatus], any(float64(http.StatusOK)))
 }
 
+func TestLoggingKeepsTheFirstStatusAHandlerSets(t *testing.T) {
+	logger, capture := logcapture.New()
+	twice := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	recorder := serve(Logging(logger, steppingClock(startInstant, stepDuration))(twice), newRequest())
+
+	expect.Equal(t, recorder.Code, http.StatusCreated)
+	expect.Equal(t, capture.Find(t, MsgRequestHandled)[LogKeyStatus], any(float64(http.StatusCreated)))
+}
+
+func TestLoggingReportsOKOnceABodyWriteSendsTheHeaders(t *testing.T) {
+	logger, capture := logcapture.New()
+	writesFirst := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(partialBody))
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	recorder := serve(Logging(logger, steppingClock(startInstant, stepDuration))(writesFirst), newRequest())
+
+	expect.Equal(t, recorder.Code, http.StatusOK)
+	expect.Equal(t, capture.Find(t, MsgRequestHandled)[LogKeyStatus], any(float64(http.StatusOK)))
+}
+
+func TestLoggingMatchesTheClientStatusWhenAHandlerPanicsAfterWriting(t *testing.T) {
+	logger, capture := logcapture.New()
+	writesThenPanics := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(partialBody))
+		panic(panicMessage)
+	})
+	handler := Chain(writesThenPanics, Logging(logger, steppingClock(startInstant, stepDuration)), Recover(logger))
+
+	recorder := serve(handler, newRequest())
+
+	expect.Equal(t, recorder.Code, http.StatusOK)
+	expect.Equal(t, capture.Find(t, MsgRequestHandled)[LogKeyStatus], any(float64(recorder.Code)))
+}
+
 func TestRecoverTurnsAPanicIntoAnInternalServerError(t *testing.T) {
 	logger, capture := logcapture.New()
 	exploding := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

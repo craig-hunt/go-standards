@@ -9,6 +9,7 @@ const (
 	wrongToken       = "wrong-token"
 	lowercaseScheme  = "bearer "
 	panicMessage     = "handler exploded"
+	partialBody      = "partial response"
 	stepDuration     = 250 * time.Millisecond
 	stepMilliseconds = 250
 	outerLayer       = "outer"

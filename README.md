@@ -100,7 +100,7 @@ Handlers pass the request context to the store, readiness bounds its database pi
 
 - **Authentication on every API route.** `middleware.RequireBearerToken` guards all of `/api/`, compares tokens in constant time, and answers 401 with `WWW-Authenticate`. Only the health probes stay open, since a platform calls them before any credential exists.
 - **Parameterized SQL only.** Queries live in constants with `$n` placeholders.
-- **Validation at the edge.** Bodies decode under a size limit and reject unknown fields, and domain types validate before a store sees a value.
+- **Validation at the edge.** Bodies decode under a size limit, accept exactly one JSON object with known fields, and reject `null`, arrays, and trailing data. Domain types validate before a store sees a value.
 - **Scanning in CI.** `gosec` through golangci-lint, `govulncheck`, Gitleaks, and Dependabot.
 
 ### 10. Tests read as behavior statements

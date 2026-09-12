@@ -23,12 +23,12 @@ func (h *Handler) Register(mux *http.ServeMux) {
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	request, err := httpjson.Decode[Request](w, r)
 	if err != nil {
-		httpjson.WriteInvalidBody(w, h.logger)
+		httpjson.WriteInvalidBody(w, r, h.logger)
 		return
 	}
 	signup, problems := Validate(request)
 	if problems != nil {
-		httpjson.WriteFieldErrors(w, h.logger, problems)
+		httpjson.WriteFieldErrors(w, r, h.logger, problems)
 		return
 	}
 	id, err := h.store.Save(r.Context(), signup)
@@ -36,5 +36,5 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteInternal(w, r, h.logger, err)
 		return
 	}
-	httpjson.Write(w, h.logger, http.StatusCreated, Confirmation{ID: id, Summary: signup.Summary()})
+	httpjson.Write(w, r, h.logger, http.StatusCreated, Confirmation{ID: id, Summary: signup.Summary()})
 }

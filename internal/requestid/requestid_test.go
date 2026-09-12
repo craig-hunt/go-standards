@@ -18,6 +18,13 @@ func TestFromReturnsEmptyWhenNoIdentifierWasStored(t *testing.T) {
 	expect.Equal(t, From(context.Background()), "")
 }
 
+func TestAttrCarriesTheIdentifierUnderTheSharedKey(t *testing.T) {
+	attr := Attr(With(context.Background(), suppliedID))
+
+	expect.Equal(t, attr.Key, LogKey)
+	expect.Equal(t, attr.Value.String(), suppliedID)
+}
+
 func TestNewGeneratesDistinctIdentifiersOfAFixedLength(t *testing.T) {
 	first, second := New(), New()
 

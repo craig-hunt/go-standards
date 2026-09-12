@@ -30,14 +30,30 @@ func RequestID(next http.Handler) http.Handler {
 	})
 }
 
+// statusRecorder keeps the first status the client receives. net/http honors
+// only the first WriteHeader call and sends 200 on the first body write, so a
+// later WriteHeader, from a second call or from Recover after a partial write,
+// must not change what the access log reports.
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status  int
+	written bool
 }
 
 func (s *statusRecorder) WriteHeader(status int) {
-	s.status = status
+	if !s.written {
+		s.status = status
+		s.written = true
+	}
 	s.ResponseWriter.WriteHeader(status)
+}
+
+func (s *statusRecorder) Write(body []byte) (int, error) {
+	if !s.written {
+		s.status = http.StatusOK
+		s.written = true
+	}
+	return s.ResponseWriter.Write(body)
 }
 
 // Logging takes the clock as a function so tests control the reported duration.
@@ -48,7 +64,7 @@ func Logging(logger *slog.Logger, now func() time.Time) Layer {
 			recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(recorder, r)
 			logger.LogAttrs(r.Context(), slog.LevelInfo, MsgRequestHandled,
-				slog.String(requestid.LogKey, requestid.From(r.Context())),
+				requestid.Attr(r.Context()),
 				slog.String(LogKeyMethod, r.Method),
 				slog.String(LogKeyPath, r.URL.Path),
 				slog.Int(LogKeyStatus, recorder.status),
@@ -74,9 +90,9 @@ func recoverPanic(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 		return
 	}
 	logger.LogAttrs(r.Context(), slog.LevelError, MsgPanicRecovered,
-		slog.String(requestid.LogKey, requestid.From(r.Context())),
+		requestid.Attr(r.Context()),
 		slog.Any(LogKeyPanic, recovered))
-	httpjson.WriteError(w, logger, http.StatusInternalServerError, httpjson.CodeInternal, httpjson.MsgInternal)
+	httpjson.WriteError(w, r, logger, http.StatusInternalServerError, httpjson.CodeInternal, httpjson.MsgInternal)
 }
 
 // RequireBearerToken compares in constant time so response timing reveals
@@ -87,7 +103,7 @@ func RequireBearerToken(token string, logger *slog.Logger) Layer {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if subtle.ConstantTimeCompare([]byte(r.Header.Get(HeaderAuthorization)), expected) != 1 {
 				w.Header().Set(HeaderWWWAuthenticate, BearerScheme)
-				httpjson.WriteError(w, logger, http.StatusUnauthorized, CodeUnauthorized, MsgUnauthorized)
+				httpjson.WriteError(w, r, logger, http.StatusUnauthorized, CodeUnauthorized, MsgUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r)
